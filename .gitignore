@@ -3,6 +3,7 @@
 .kotlin/
 **/build/
 dist/
+*.zip
 local.properties
 /.idea/
 .DS_Store
