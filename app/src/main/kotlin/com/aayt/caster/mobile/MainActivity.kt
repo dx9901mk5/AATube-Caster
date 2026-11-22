@@ -32,47 +32,67 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.InstallMobile
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -84,6 +104,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -93,33 +114,54 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.aayt.caster.AAYtApplication
+import com.aayt.caster.BuildConfig
+import com.aayt.caster.data.QueuePreferences
 import com.aayt.caster.data.ShareBehavior
 import com.aayt.caster.data.YoutubeUrlParser
 import com.aayt.caster.data.YtVideoItem
 import com.aayt.caster.player.ExoPlayerController
 import com.aayt.caster.player.PlaybackUiState
 import com.aayt.caster.ui.theme.AATubeTheme
+import com.aayt.caster.update.UpdateManager
+import com.aayt.caster.update.UpdateUiState
 
 class MainActivity : ComponentActivity() {
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* Optional notification permission result */ }
+    ) { /* Refreshed automatically on ON_RESUME */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
 
-        val controller = AAYtApplication.from(this).playerController
+        val app = AAYtApplication.from(this)
 
         setContent {
             AATubeTheme {
-                MobileCompanionRoot(controller = controller)
+                MobileCompanionRoot(
+                    controller = app.playerController,
+                    updateManager = app.updateManager,
+                    prefs = app.queuePreferences,
+                    onRequestNotificationPermission = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            PermissionHelper.openNotificationSettings(this)
+                        }
+                    }
+                )
             }
         }
     }
@@ -137,9 +179,38 @@ class MainActivity : ComponentActivity() {
 
 @kotlin.OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MobileCompanionRoot(controller: ExoPlayerController) {
+fun MobileCompanionRoot(
+    controller: ExoPlayerController,
+    updateManager: UpdateManager,
+    prefs: QueuePreferences,
+    onRequestNotificationPermission: () -> Unit
+) {
     val state by controller.state.collectAsState()
+    val updateState by updateManager.uiState.collectAsState()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var permStatus by remember { mutableStateOf(PermissionHelper.checkStatus(context)) }
+
+    // Auto-refresh permission statuses & resume pending APK install whenever user returns from Settings!
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permStatus = PermissionHelper.checkStatus(context)
+                updateManager.resumePendingInstallIfPermitted()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Silent background update check on startup if enabled
+    LaunchedEffect(Unit) {
+        if (prefs.autoCheckUpdate) {
+            updateManager.checkForUpdates(silentIfUpToDate = true)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -152,7 +223,7 @@ fun MobileCompanionRoot(controller: ExoPlayerController) {
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("AA Tube 車載無廣告影音", fontWeight = FontWeight.Bold)
+                        Text("AA Tube 車載影音", fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
@@ -185,20 +256,20 @@ fun MobileCompanionRoot(controller: ExoPlayerController) {
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Default.QueueMusic, contentDescription = null) },
-                    label = { Text("待播佇列 (${state.queue.size})") }
+                    icon = { Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null) },
+                    label = { Text("待播 (${state.queue.size})") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("播放設定") }
+                    label = { Text("設定/權限") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
                     icon = { Icon(Icons.Default.Build, contentDescription = null) },
-                    label = { Text("免Root上車") }
+                    label = { Text("上車教學") }
                 )
             }
         }
@@ -208,7 +279,37 @@ fun MobileCompanionRoot(controller: ExoPlayerController) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Active Player / Car Remote Card
+            // Top New Version Banner if update detected while on non-settings tab
+            val availableUpdate = (updateState as? UpdateUiState.UpdateAvailable)?.info
+            if (availableUpdate != null && selectedTab != 2) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .clickable { selectedTab = 2 }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "發現新版本 v${availableUpdate.latestVersion}！點擊前往一鍵更新",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White)
+                    }
+                }
+            }
+
             if (state.currentStream != null || state.isLoadingStream) {
                 MobileNowPlayingSection(
                     state = state,
@@ -237,7 +338,15 @@ fun MobileCompanionRoot(controller: ExoPlayerController) {
                 when (selectedTab) {
                     0 -> MobileExploreTab(state = state, controller = controller)
                     1 -> MobileQueueTab(state = state, controller = controller)
-                    2 -> MobileSettingsTab(state = state, controller = controller)
+                    2 -> MobileSettingsTab(
+                        state = state,
+                        controller = controller,
+                        permStatus = permStatus,
+                        updateState = updateState,
+                        updateManager = updateManager,
+                        prefs = prefs,
+                        onRequestNotificationPermission = onRequestNotificationPermission
+                    )
                     3 -> MobileInstallGuideTab()
                 }
             }
@@ -271,8 +380,6 @@ private fun MobileNowPlayingSection(
             } else {
                 val stream = state.currentStream ?: return@Column
 
-                // Only attach local PlayerView when NOT projecting to Android Auto
-                // so the car VirtualDisplay always owns the hardware video surface exclusively!
                 if (!state.isCarProjected) {
                     AndroidView(
                         factory = { ctx ->
@@ -444,7 +551,6 @@ private fun MobileExploreTab(
             }
         }
 
-        // Quick preset search tags
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -562,7 +668,7 @@ private fun MobileVideoRow(
 
             if (onEnqueue != null) {
                 IconButton(onClick = onEnqueue) {
-                    Icon(Icons.Default.PlaylistAdd, contentDescription = "加入待播佇列")
+                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = "加入待播佇列")
                 }
             }
             if (onRemove != null) {
@@ -607,47 +713,487 @@ private fun MobileQueueTab(
 @Composable
 private fun MobileSettingsTab(
     state: PlaybackUiState,
-    controller: ExoPlayerController
+    controller: ExoPlayerController,
+    permStatus: AppPermissionStatus,
+    updateState: UpdateUiState,
+    updateManager: UpdateManager,
+    prefs: QueuePreferences,
+    onRequestNotificationPermission: () -> Unit
 ) {
+    val context = LocalContext.current
+    var autoCheck by remember { mutableStateOf(prefs.autoCheckUpdate) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("預設串流畫質上限", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf(1080 to "1080p 高清", 720 to "720p 省電順暢", 480 to "480p 省流量").forEach { (h, label) ->
-                FilterChip(
-                    selected = state.preferredQualityHeight == h,
-                    onClick = { controller.setPreferredQualityHeight(h) },
-                    label = { Text(label) }
+        // ==================== SECTION 1: 權限檢查與一鍵導向開啟 ====================
+        Text(
+            text = "權限與車機環境檢查（點擊直接前往設定）",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                PermissionRowItem(
+                    icon = Icons.Default.NotificationsActive,
+                    title = "媒體播放與更新通知權限",
+                    subtitle = if (permStatus.notificationsGranted) {
+                        "已開啟 • 確保背景車載播放服務穩定常駐"
+                    } else {
+                        "尚未開啟 • 點擊前往開啟通知權限"
+                    },
+                    isGranted = permStatus.notificationsGranted,
+                    onClick = onRequestNotificationPermission
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                PermissionRowItem(
+                    icon = Icons.Default.BatteryChargingFull,
+                    title = "背景省電無限制（忽略電池最佳化）",
+                    subtitle = if (permStatus.batteryOptimizationIgnored) {
+                        "已設為無限制 • 手機鎖屏投影車機不中斷"
+                    } else {
+                        "受省電限制 • 點擊一鍵允許背景無限制執行"
+                    },
+                    isGranted = permStatus.batteryOptimizationIgnored,
+                    onClick = { PermissionHelper.openBatteryOptimizationSettings(context) }
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                PermissionRowItem(
+                    icon = Icons.Default.InstallMobile,
+                    title = "允許安裝未知應用程式（自動更新用）",
+                    subtitle = if (permStatus.installUnknownAppsGranted) {
+                        "已授權 • 下載新版 APK 後可直接進入安裝"
+                    } else {
+                        "尚未授權 • 點擊前往開啟，讓更新包可自動安裝"
+                    },
+                    isGranted = permStatus.installUnknownAppsGranted,
+                    onClick = { PermissionHelper.openInstallUnknownAppsSettings(context) }
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                PermissionRowItem(
+                    icon = Icons.Default.VerifiedUser,
+                    title = "Android Auto 安裝來源驗證",
+                    subtitle = if (permStatus.isPlayStoreInstaller) {
+                        "已識別為 Google Play (com.android.vending)"
+                    } else {
+                        "目前來源：${permStatus.installerPackageName ?: "系統預設"}（點擊複製 com.android.vending）"
+                    },
+                    isGranted = permStatus.isPlayStoreInstaller,
+                    onClick = {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("installer", "com.android.vending"))
+                        Toast.makeText(
+                            context,
+                            "已複製 com.android.vending（請搭配 Shizuku 安裝器或電腦 ADB 腳本安裝）",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                PermissionRowItem(
+                    icon = Icons.Default.DirectionsCar,
+                    title = "Android Auto 系統設定與自訂啟動器",
+                    subtitle = if (permStatus.isAndroidAutoInstalled) {
+                        "點擊開啟 Android Auto 設定（檢查「未知的來源」與「自訂啟動器」）"
+                    } else {
+                        "未偵測到 Android Auto，點擊開啟連接裝置設定"
+                    },
+                    isGranted = permStatus.isAndroidAutoInstalled,
+                    onClick = { PermissionHelper.openAndroidAutoSettings(context) }
                 )
             }
         }
 
+        // ==================== SECTION 2: 播放與分享偏好 ====================
         Text(
-            "從原生 YouTube App「分享」時的行為",
+            text = "播放與分享設定",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
-        ShareBehavior.entries.forEach { option ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { controller.setShareBehavior(option) }
-                    .padding(vertical = 4.dp)
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                RadioButton(
-                    selected = state.shareBehavior == option,
-                    onClick = { controller.setShareBehavior(option) }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(option.title)
+                Text("預設串流畫質上限", fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(1080 to "1080p 高清", 720 to "720p 順暢", 480 to "480p 省流").forEach { (h, label) ->
+                        FilterChip(
+                            selected = state.preferredQualityHeight == h,
+                            onClick = { controller.setPreferredQualityHeight(h) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                Text("從原生 YouTube App「分享」時的預設行為", fontWeight = FontWeight.SemiBold)
+                ShareBehavior.entries.forEach { option ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { controller.setShareBehavior(option) }
+                            .padding(vertical = 2.dp)
+                    ) {
+                        RadioButton(
+                            selected = state.shareBehavior == option,
+                            onClick = { controller.setShareBehavior(option) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(option.title, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
         }
+
+        // ==================== SECTION 3: 自動檢查更新 & GitHub 專案連結 ====================
+        Text(
+            text = "版本更新與開源專案",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("啟動時自動檢查更新", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "目前安裝版本：v${BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = autoCheck,
+                        onCheckedChange = {
+                            autoCheck = it
+                            prefs.autoCheckUpdate = it
+                        }
+                    )
+                }
+
+                // Check for Updates Button
+                Button(
+                    onClick = { updateManager.checkForUpdates(silentIfUpToDate = false) },
+                    enabled = updateState !is UpdateUiState.Checking && updateState !is UpdateUiState.Downloading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (updateState is UpdateUiState.Checking) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("正在連線 GitHub 檢查最新版本...")
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("檢查更新 (Check for Updates)")
+                    }
+                }
+
+                // Dynamic Update Status Area
+                when (updateState) {
+                    is UpdateUiState.Idle -> Unit
+
+                    is UpdateUiState.Checking -> Unit
+
+                    is UpdateUiState.UpToDate -> {
+                        Surface(
+                            color = Color(0xFF132A17),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "✅ 目前已是最新版本 (v${updateState.currentVersion})",
+                                    color = Color(0xFFA5D6A7),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                updateState.latestRelease?.let { latest ->
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    OutlinedButton(
+                                        onClick = { updateManager.downloadAndInstall(latest) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.CloudDownload, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("重新下載並覆蓋安裝 v${latest.latestVersion}")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    is UpdateUiState.UpdateAvailable -> {
+                        val info = updateState.info
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "🎉 發現新版本：v${info.latestVersion}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                if (info.changelog.isNotBlank()) {
+                                    Text(
+                                        text = info.changelog,
+                                        color = Color(0xFFFFD9DE),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 8,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Button(
+                                    onClick = { updateManager.downloadAndInstall(info) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("立即自動下載並進入安裝", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    is UpdateUiState.Downloading -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val sizeText = if (updateState.totalMb > 0f) {
+                                    "%.1f MB / %.1f MB (%d%%)".format(
+                                        updateState.downloadedMb,
+                                        updateState.totalMb,
+                                        updateState.progressPercent
+                                    )
+                                } else {
+                                    "已下載 %.1f MB".format(updateState.downloadedMb)
+                                }
+                                Text(
+                                    text = "⬇️ 正在下載 v${updateState.info.latestVersion} 更新包... $sizeText",
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                LinearProgressIndicator(
+                                    progress = { (updateState.progressPercent / 100f).coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+
+                    is UpdateUiState.WaitingInstallPermission -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "APK 已下載完成！請先開啟「允許安裝未知應用程式」權限即可自動安裝：",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Button(
+                                    onClick = { PermissionHelper.openInstallUnknownAppsSettings(context) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("前往開啟安裝權限")
+                                }
+                            }
+                        }
+                    }
+
+                    is UpdateUiState.ReadyToInstall -> {
+                        Button(
+                            onClick = { updateManager.triggerPackageInstaller(updateState.apkFile) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.InstallMobile, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("再次啟動安裝 v${updateState.info.latestVersion}")
+                        }
+                    }
+
+                    is UpdateUiState.Error -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = updateState.message,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                // Bottom GitHub Repository Link Row
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { PermissionHelper.openGitHubRepo(context, UpdateManager.GITHUB_REPO_URL) }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Code,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "GitHub 開源儲存庫 (AATube-Caster)",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "github.com/dx9901mk5/AATube-Caster",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = "開啟 GitHub",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun PermissionRowItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    isGranted: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp)
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(40.dp)
+                .background(
+                    color = if (isGranted) Color(0xFF14331B) else Color(0xFF3B2314),
+                    shape = CircleShape
+                )
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isGranted) Color(0xFF69F0AE) else Color(0xFFFFB74D),
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Icon(
+            imageVector = if (isGranted) Icons.Default.CheckCircle else Icons.Default.Warning,
+            contentDescription = null,
+            tint = if (isGranted) Color(0xFF69F0AE) else Color(0xFFFFB74D),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -672,18 +1218,23 @@ private fun MobileInstallGuideTab() {
                 Text(
                     "1. 打開手機「設定 -> 連接的裝置 -> 連線偏好設定 -> Android Auto」。\n" +
                         "2. 滑到最底部連點 10 次「版本」啟用開發人員模式。\n" +
-                        "3. 點右上角「⋮ -> 開發人員設定」，勾選「未知的來源 (Unknown sources)」。"
+                        "3. 點右上角「⋮ -> 開發人員設定」，將應用程式模式設為「開發人員」並勾選「未知的來源 (Unknown sources)」。"
                 )
+                OutlinedButton(onClick = { PermissionHelper.openAndroidAutoSettings(context) }) {
+                    Icon(Icons.Default.DirectionsCar, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("直接打開 Android Auto 設定")
+                }
             }
         }
 
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("步驟 2：標記為 Google Play 安裝來源（二選一）", fontWeight = FontWeight.Bold)
+                Text("步驟 2：標記為 Google Play 安裝來源", fontWeight = FontWeight.Bold)
                 Text(
                     "Android 14+ 會檢查 APK 的安裝器名稱是否為 Google Play (com.android.vending)：\n\n" +
-                        "• 方法 A（免費免帳號）：使用 Shizuku 搭配「Install with Options」安裝本 APK，在 Installer 欄位填入 com.android.vending。\n" +
-                        "• 方法 B（最穩定）：將打包檔案上傳至 Google Play Console「內部應用程式分享（免審核）」，透過產生的連結一鍵安裝。"
+                        "• 方法 A（手機端 Shizuku）：使用 InstallerX Revived 或 Install with Options 安裝本 APK，將 Installer 設為 com.android.vending。\n" +
+                        "• 方法 B（電腦端 ADB）：接上電腦執行專案內的 Install-ToPhone.ps1 腳本一鍵完成。"
                 )
                 Button(
                     onClick = {

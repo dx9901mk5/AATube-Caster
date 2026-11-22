@@ -12,13 +12,26 @@ android {
     applicationId = "com.aayt.caster"
     minSdk = 28
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0.0"
+    versionCode = 2
+    versionName = "1.1.0"
+  }
+
+  signingConfigs {
+    create("aatube") {
+      storeFile = file("signing/aatube.p12")
+      storePassword = "aatube2026"
+      keyAlias = "aatube"
+      keyPassword = "aatube2026"
+    }
   }
 
   buildTypes {
+    debug {
+      signingConfig = signingConfigs.getByName("aatube")
+    }
     release {
       isMinifyEnabled = false
+      signingConfig = signingConfigs.getByName("aatube")
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
   }

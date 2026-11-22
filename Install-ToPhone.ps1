@@ -1,12 +1,22 @@
 ﻿param(
-    [string]$ApkPath = "$PSScriptRoot\app\build\outputs\apk\debug\app-debug.apk",
+    [string]$ApkPath = "",
     [switch]$CleanReinstall
 )
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Test-Path -LiteralPath $ApkPath)) {
-    throw "找不到 APK 檔案：$ApkPath，請先執行 .\gradlew.bat assembleDebug"
+if ([string]::IsNullOrWhiteSpace($ApkPath)) {
+    $candidates = @(
+        "$PSScriptRoot\dist\AATube-Caster-latest.apk",
+        "$env:TEMP\AATube-Caster-build\app\outputs\apk\release\app-release.apk",
+        "$PSScriptRoot\app\build\outputs\apk\release\app-release.apk",
+        "$PSScriptRoot\app\build\outputs\apk\debug\app-debug.apk"
+    )
+    $ApkPath = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+}
+
+if ([string]::IsNullOrWhiteSpace($ApkPath) -or -not (Test-Path -LiteralPath $ApkPath)) {
+    throw "找不到 APK 檔案，請先執行 .\gradlew.bat assembleRelease"
 }
 
 & "D:\Android\SdkPool\Invoke-WithFreeSdk.ps1" {

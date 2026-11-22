@@ -7,10 +7,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Android Auto Car App Library Surface & Navigation Template Permissions -->
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
     <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+
+    <queries>
+        <package android:name="com.google.android.projection.gearhead" />
+    </queries>
 
     <application
         android:name=".AAYtApplication"
@@ -30,6 +36,17 @@
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="2" />
+
+        <!-- FileProvider for In-App Auto-Update APK Installation -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Phone Companion Main Activity -->
         <activity

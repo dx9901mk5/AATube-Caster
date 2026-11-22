@@ -6,6 +6,7 @@ import com.aayt.caster.data.OkHttpNewPipeDownloader
 import com.aayt.caster.data.QueuePreferences
 import com.aayt.caster.data.YoutubeExtractorRepo
 import com.aayt.caster.player.ExoPlayerController
+import com.aayt.caster.update.UpdateManager
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.localization.Localization
@@ -19,6 +20,9 @@ class AAYtApplication : Application() {
         private set
 
     lateinit var playerController: ExoPlayerController
+        private set
+
+    lateinit var updateManager: UpdateManager
         private set
 
     override fun onCreate() {
@@ -36,6 +40,7 @@ class AAYtApplication : Application() {
             extractorRepo = extractorRepo,
             prefs = queuePreferences
         )
+        updateManager = UpdateManager(this)
     }
 
     companion object {

@@ -32,6 +32,10 @@ class QueuePreferences(context: Context) {
         }
         set(value) = prefs.edit().putString(KEY_SHARE_BEHAVIOR, value.name).apply()
 
+    var autoCheckUpdate: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_CHECK_UPDATE, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_CHECK_UPDATE, value).apply()
+
     private fun decodeList(key: String): List<YtVideoItem> {
         val raw = prefs.getString(key, null) ?: return emptyList()
         return runCatching { json.decodeFromString<List<YtVideoItem>>(raw) }.getOrDefault(emptyList())
@@ -42,5 +46,6 @@ class QueuePreferences(context: Context) {
         private const val KEY_HISTORY = "watch_history"
         private const val KEY_QUALITY = "preferred_quality_height"
         private const val KEY_SHARE_BEHAVIOR = "share_behavior"
+        private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
     }
 }

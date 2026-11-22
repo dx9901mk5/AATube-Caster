@@ -18,6 +18,7 @@
   * **全螢幕上滑**：拉出底部「相關推薦影片 & 待播清單」抽屜
   * **全螢幕下滑**：無縫縮小為右下角 **子母畫面 (`MiniPlayer`)**，一邊看片一邊滑逛首頁與搜尋結果
 * **車載音訊與方向盤整合**：完整整合 `MediaSession`，支援方向盤實體上下首／暫停鍵，並支援 **導航語音自動降音（Audio Ducking）**，Google Maps 播報路況時不中斷影片。
+* **內建權限環境健檢與 GitHub 一鍵自動更新（v1.1.0+）**：設定頁內建「通知權限、背景省電無限制、允許安裝未知應用、Android Auto Play 來源驗證、Android Auto 設定捷徑」即時檢查與點擊直達授權；支援一鍵連線 GitHub Releases 檢查新版本、顯示進度條自動下載並跳轉進入安裝。
 
 ### 🇺🇸 English Overview
 * **Rootless on Android 14 / 15 / 16**: Built on official `androidx.car.app` (`CarAppService` + `SurfaceCallback` + `Action.PAN`) bridged to a hardware-accelerated `VirtualDisplay` & Jetpack Compose `Presentation`—no Magisk or LSPosed required.
@@ -30,6 +31,7 @@
   * **Swipe Up**: Pull up the **Related Videos & Up Next Queue** sheet.
   * **Swipe Down**: Minimize seamlessly into a live **Picture-in-Picture MiniPlayer** while browsing/searching videos on the car screen.
 * **Steering Wheel & Navigation Audio Ducking**: Full `MediaSessionService` integration for steering wheel Next/Previous controls and automatic audio ducking during turn-by-turn navigation prompts.
+* **Built-in Permission Checker & One-Tap GitHub Auto-Updater (v1.1.0+)**: Live status check and direct settings navigation for Notifications, Battery Optimization Unrestricted, Install Unknown Apps, Play Store Installer Verification, and Android Auto Settings, plus one-tap OTA APK download & installation from GitHub Releases.
 
 ---
 
