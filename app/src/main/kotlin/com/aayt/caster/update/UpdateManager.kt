@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.content.FileProvider
 import com.aayt.caster.BuildConfig
 import com.aayt.caster.mobile.PermissionHelper
+import com.aayt.caster.shizuku.ShizukuAaManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,7 +65,8 @@ sealed interface UpdateUiState {
 }
 
 class UpdateManager(
-    private val appContext: Context
+    private val appContext: Context,
+    private val shizukuManager: ShizukuAaManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val json = Json { ignoreUnknownKeys = true }
@@ -199,7 +201,12 @@ class UpdateManager(
 
             downloadResult
                 .onSuccess { apkFile ->
-                    if (!appContext.packageManager.canRequestPackageInstalls()) {
+                    // Prefer Shizuku silent install so installer=com.android.vending is preserved for Android Auto!
+                    if (shizukuManager.state.value.serviceBound &&
+                        shizukuManager.installApkViaShizuku(apkFile.absolutePath)
+                    ) {
+                        _uiState.value = UpdateUiState.ReadyToInstall(apkFile, info)
+                    } else if (!appContext.packageManager.canRequestPackageInstalls()) {
                         _uiState.value = UpdateUiState.WaitingInstallPermission(apkFile, info)
                         PermissionHelper.openInstallUnknownAppsSettings(appContext)
                     } else {

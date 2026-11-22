@@ -48,11 +48,15 @@ if ([string]::IsNullOrWhiteSpace($ApkPath) -or -not (Test-Path -LiteralPath $Apk
         throw "ADB 安裝失敗，請確認手機螢幕是否跳出「允許 USB 安裝」提示，或加上 -CleanReinstall 參數重試。"
     }
 
-    Write-Host "==> [4/5] 設定背景執行保活與電池最佳化白名單..." -ForegroundColor Cyan
+    Write-Host "==> [4/5] 設定背景執行保活、電池最佳化白名單並重置 Android Auto 快取..." -ForegroundColor Cyan
     & $adb shell dumpsys deviceidle whitelist +com.aayt.caster | Out-Null
+    & $adb shell dumpsys deviceidle whitelist +com.google.android.projection.gearhead | Out-Null
     & $adb shell appops set com.aayt.caster RUN_IN_BACKGROUND allow | Out-Null
     & $adb shell appops set com.aayt.caster RUN_ANY_IN_BACKGROUND allow | Out-Null
     & $adb shell appops set com.aayt.caster START_FOREGROUND allow | Out-Null
+    & $adb shell appops set com.aayt.caster PROJECT_MEDIA allow | Out-Null
+    & $adb shell pm enable com.aayt.caster/.car.YoutubeCarAppService | Out-Null
+    & $adb shell am force-stop com.google.android.projection.gearhead | Out-Null
 
     Write-Host "==> [5/5] 驗證安裝來源與 Android Auto CarAppService 註冊狀態..." -ForegroundColor Cyan
     $installerCheck = & $adb shell pm list packages -i com.aayt.caster

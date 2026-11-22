@@ -6,6 +6,7 @@ import com.aayt.caster.data.OkHttpNewPipeDownloader
 import com.aayt.caster.data.QueuePreferences
 import com.aayt.caster.data.YoutubeExtractorRepo
 import com.aayt.caster.player.ExoPlayerController
+import com.aayt.caster.shizuku.ShizukuAaManager
 import com.aayt.caster.update.UpdateManager
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.ContentCountry
@@ -20,6 +21,9 @@ class AAYtApplication : Application() {
         private set
 
     lateinit var playerController: ExoPlayerController
+        private set
+
+    lateinit var shizukuManager: ShizukuAaManager
         private set
 
     lateinit var updateManager: UpdateManager
@@ -40,7 +44,8 @@ class AAYtApplication : Application() {
             extractorRepo = extractorRepo,
             prefs = queuePreferences
         )
-        updateManager = UpdateManager(this)
+        shizukuManager = ShizukuAaManager(this).apply { init() }
+        updateManager = UpdateManager(this, shizukuManager)
     }
 
     companion object {

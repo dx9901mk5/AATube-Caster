@@ -12,8 +12,8 @@ android {
     applicationId = "com.aayt.caster"
     minSdk = 28
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.1.0"
+    versionCode = 3
+    versionName = "1.2.0"
   }
 
   signingConfigs {
@@ -104,6 +104,10 @@ dependencies {
   // Coroutines & JSON Serialization
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.serialization.json)
+
+  // Shizuku (Built-in Rootless Shell Bridge for AA Recognition & OTA)
+  implementation(libs.shizuku.api)
+  implementation(libs.shizuku.provider)
 
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)

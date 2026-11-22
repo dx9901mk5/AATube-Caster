@@ -128,6 +128,8 @@ import com.aayt.caster.data.YoutubeUrlParser
 import com.aayt.caster.data.YtVideoItem
 import com.aayt.caster.player.ExoPlayerController
 import com.aayt.caster.player.PlaybackUiState
+import com.aayt.caster.shizuku.ShizukuAaManager
+import com.aayt.caster.shizuku.ShizukuUiState
 import com.aayt.caster.ui.theme.AATubeTheme
 import com.aayt.caster.update.UpdateManager
 import com.aayt.caster.update.UpdateUiState
@@ -150,6 +152,7 @@ class MainActivity : ComponentActivity() {
                 MobileCompanionRoot(
                     controller = app.playerController,
                     updateManager = app.updateManager,
+                    shizukuManager = app.shizukuManager,
                     prefs = app.queuePreferences,
                     onRequestNotificationPermission = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -182,22 +185,25 @@ class MainActivity : ComponentActivity() {
 fun MobileCompanionRoot(
     controller: ExoPlayerController,
     updateManager: UpdateManager,
+    shizukuManager: ShizukuAaManager,
     prefs: QueuePreferences,
     onRequestNotificationPermission: () -> Unit
 ) {
     val state by controller.state.collectAsState()
     val updateState by updateManager.uiState.collectAsState()
+    val shizukuState by shizukuManager.state.collectAsState()
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var permStatus by remember { mutableStateOf(PermissionHelper.checkStatus(context)) }
 
-    // Auto-refresh permission statuses & resume pending APK install whenever user returns from Settings!
+    // Auto-refresh permission statuses, Shizuku binder, & resume pending APK install whenever user returns!
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 permStatus = PermissionHelper.checkStatus(context)
+                shizukuManager.refreshAndBind()
                 updateManager.resumePendingInstallIfPermitted()
             }
         }
@@ -342,6 +348,8 @@ fun MobileCompanionRoot(
                         state = state,
                         controller = controller,
                         permStatus = permStatus,
+                        shizukuState = shizukuState,
+                        shizukuManager = shizukuManager,
                         updateState = updateState,
                         updateManager = updateManager,
                         prefs = prefs,
@@ -715,6 +723,8 @@ private fun MobileSettingsTab(
     state: PlaybackUiState,
     controller: ExoPlayerController,
     permStatus: AppPermissionStatus,
+    shizukuState: ShizukuUiState,
+    shizukuManager: ShizukuAaManager,
     updateState: UpdateUiState,
     updateManager: UpdateManager,
     prefs: QueuePreferences,
@@ -730,6 +740,102 @@ private fun MobileSettingsTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // ==================== SECTION 0: 內建 Shizuku 一鍵寫入 AA App 辨識 ====================
+        Text(
+            text = "Shizuku 一鍵寫入 Android Auto 辨識",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val statusText = when {
+                    !shizukuState.isInstalled -> "❌ 未安裝 Shizuku App"
+                    !shizukuState.binderAlive -> "⚠️ Shizuku 尚未啟動（請先透過無線偵錯啟動 Shizuku）"
+                    !shizukuState.permissionGranted -> "🔐 Shizuku 運行中，尚未授權本 App"
+                    shizukuState.serviceBound -> "✅ Shizuku 特權服務已連線就緒 (UID 2000)"
+                    else -> "⏳ 正在連線 Shizuku 特權服務..."
+                }
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (shizukuState.serviceBound) Color(0xFF69F0AE) else Color(0xFFFFB74D)
+                )
+
+                Text(
+                    text = "若 Android Auto 看不到「AA Tube 車載影音」，請點擊下方按鈕執行內建 Shizuku 腳本：自動寫入 Play 商店安裝來源 (com.android.vending)、省電與背景媒體權限，並重整 Android Auto (gearhead) 快取。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                when {
+                    !shizukuState.binderAlive -> {
+                        Button(
+                            onClick = { shizukuManager.openShizukuApp() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("前往開啟 Shizuku App")
+                        }
+                    }
+                    !shizukuState.permissionGranted -> {
+                        Button(
+                            onClick = { shizukuManager.requestPermission() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("立即授權 Shizuku 權限")
+                        }
+                    }
+                    else -> {
+                        Button(
+                            onClick = { shizukuManager.runAaRecognitionScript(forceReinstallPlayStore = true) },
+                            enabled = !shizukuState.isRunningScript,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (shizukuState.isRunningScript) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("正在寫入 AA 辨識腳本...")
+                            } else {
+                                Text("⚡ 執行 Shizuku 腳本：寫入 AA App 辨識", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                shizukuState.lastScriptOutput?.let { output ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = output,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         // ==================== SECTION 1: 權限檢查與一鍵導向開啟 ====================
         Text(
             text = "權限與車機環境檢查（點擊直接前往設定）",
