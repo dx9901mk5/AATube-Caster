@@ -24,6 +24,7 @@ import androidx.media3.exoplayer.source.SingleSampleMediaSource
 import com.aayt.caster.data.CarBrowseTab
 import com.aayt.caster.data.CarViewMode
 import com.aayt.caster.data.OkHttpNewPipeDownloader
+import com.aayt.caster.data.PlayerEngineMode
 import com.aayt.caster.data.QueuePreferences
 import com.aayt.caster.data.ResolvedStream
 import com.aayt.caster.data.SeekFeedbackEvent
@@ -72,7 +73,10 @@ data class PlaybackUiState(
     val queue: List<YtVideoItem> = emptyList(),
     val history: List<YtVideoItem> = emptyList(),
     val preferredQualityHeight: Int = 720,
-    val shareBehavior: ShareBehavior = ShareBehavior.ASK_WHEN_PLAYING
+    val shareBehavior: ShareBehavior = ShareBehavior.ASK_WHEN_PLAYING,
+    val engineMode: PlayerEngineMode = PlayerEngineMode.NATIVE_AD_FREE,
+    val webTargetUrl: String = "https://m.youtube.com",
+    val webUrlTriggerNonce: Long = 0L
 )
 
 @OptIn(UnstableApi::class)
@@ -138,7 +142,8 @@ class ExoPlayerController(
             queue = prefs.loadQueue(),
             history = prefs.loadHistory(),
             preferredQualityHeight = prefs.preferredQualityHeight,
-            shareBehavior = prefs.shareBehavior
+            shareBehavior = prefs.shareBehavior,
+            engineMode = prefs.engineMode
         )
     )
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
@@ -208,6 +213,11 @@ class ExoPlayerController(
     fun searchYoutube(query: String) {
         val trimmed = query.trim()
         if (trimmed.isBlank()) return
+        if (_state.value.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB) {
+            val encoded = java.net.URLEncoder.encode(trimmed, "UTF-8")
+            openWebUrl("https://m.youtube.com/results?search_query=$encoded")
+            return
+        }
         _state.update {
             it.copy(
                 searchQuery = trimmed,
@@ -237,6 +247,12 @@ class ExoPlayerController(
     }
 
     fun playUrlOrVideo(urlOrId: String, openFullscreenOnCar: Boolean = true) {
+        if (_state.value.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB) {
+            val canonical = com.aayt.caster.data.YoutubeUrlParser.extractCanonicalUrl(urlOrId) ?: urlOrId
+            val mobileUrl = canonical.replace("www.youtube.com", "m.youtube.com")
+            openWebUrl(mobileUrl)
+            return
+        }
         ensureForegroundServiceStarted()
         loadJob?.cancel()
         _state.update {
@@ -341,6 +357,24 @@ class ExoPlayerController(
     fun setPreferredQualityHeight(height: Int) {
         prefs.preferredQualityHeight = height
         _state.update { it.copy(preferredQualityHeight = height) }
+    }
+
+    fun setEngineMode(mode: PlayerEngineMode) {
+        if (_state.value.engineMode == mode) return
+        prefs.engineMode = mode
+        if (mode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB) {
+            exoPlayer.pause()
+        }
+        _state.update { it.copy(engineMode = mode) }
+    }
+
+    fun openWebUrl(url: String) {
+        _state.update {
+            it.copy(
+                webTargetUrl = url,
+                webUrlTriggerNonce = System.currentTimeMillis()
+            )
+        }
     }
 
     private fun prepareAndPlaySource(

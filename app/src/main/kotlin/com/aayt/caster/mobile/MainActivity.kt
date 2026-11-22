@@ -122,6 +122,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.aayt.caster.AAYtApplication
 import com.aayt.caster.BuildConfig
+import com.aayt.caster.data.PlayerEngineMode
 import com.aayt.caster.data.QueuePreferences
 import com.aayt.caster.data.ShareBehavior
 import com.aayt.caster.data.YoutubeUrlParser
@@ -131,6 +132,8 @@ import com.aayt.caster.player.PlaybackUiState
 import com.aayt.caster.shizuku.ShizukuAaManager
 import com.aayt.caster.shizuku.ShizukuUiState
 import com.aayt.caster.ui.theme.AATubeTheme
+import com.aayt.caster.ui.web.YoutubeAccountWebPlayer
+import com.aayt.caster.ui.web.YoutubeWebHelper
 import com.aayt.caster.update.UpdateManager
 import com.aayt.caster.update.UpdateUiState
 
@@ -316,7 +319,9 @@ fun MobileCompanionRoot(
                 }
             }
 
-            if (state.currentStream != null || state.isLoadingStream) {
+            if (state.engineMode == PlayerEngineMode.NATIVE_AD_FREE &&
+                (state.currentStream != null || state.isLoadingStream)
+            ) {
                 MobileNowPlayingSection(
                     state = state,
                     controller = controller
@@ -505,6 +510,73 @@ private fun MobileExploreTab(
     val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Dual-Mode Switcher Bar (Ad-Free ExoPlayer vs Personal Google Account WebView)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = state.engineMode == PlayerEngineMode.NATIVE_AD_FREE,
+                onClick = { controller.setEngineMode(PlayerEngineMode.NATIVE_AD_FREE) },
+                label = { Text("⚡ 純淨無廣告 (ExoPlayer)") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = state.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB,
+                onClick = { controller.setEngineMode(PlayerEngineMode.GOOGLE_ACCOUNT_WEB) },
+                label = { Text("👤 個人 Google 帳號") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (state.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB) {
+            if (state.isCarProjected) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp)
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.DirectionsCar,
+                                contentDescription = null,
+                                tint = Color(0xFF69F0AE),
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Text(
+                                text = "車機正以「個人 Google 帳號模式」投影中",
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "您可直接於車機螢幕觸控操作已登入的個人 YouTube，或隨時點擊上方切換回「純淨無廣告模式」。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else {
+                YoutubeAccountWebPlayer(
+                    targetUrl = state.webTargetUrl,
+                    triggerNonce = state.webUrlTriggerNonce,
+                    isCarMode = false,
+                    onSwitchToAdFreeMode = { controller.setEngineMode(PlayerEngineMode.NATIVE_AD_FREE) }
+                )
+            }
+            return
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -941,6 +1013,36 @@ private fun MobileSettingsTab(
                 modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                Text("預設 YouTube 播放引擎模式", fontWeight = FontWeight.SemiBold)
+                PlayerEngineMode.entries.forEach { mode ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { controller.setEngineMode(mode) }
+                            .padding(vertical = 2.dp)
+                    ) {
+                        RadioButton(
+                            selected = state.engineMode == mode,
+                            onClick = { controller.setEngineMode(mode) }
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(mode.title, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        YoutubeWebHelper.clearGoogleAccountCookies()
+                        Toast.makeText(context, "已清除 Google 帳號登入紀錄，可重新登入切換帳號", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("登出／切換個人 Google 帳號 (清除 Cookie)")
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
                 Text("預設串流畫質上限", fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(1080 to "1080p 高清", 720 to "720p 順暢", 480 to "480p 省流").forEach { (h, label) ->

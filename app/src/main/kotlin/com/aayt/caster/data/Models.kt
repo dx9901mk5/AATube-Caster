@@ -53,6 +53,12 @@ data class ResolvedStream(
 )
 
 @Serializable
+enum class PlayerEngineMode(val title: String) {
+    NATIVE_AD_FREE("純淨無廣告模式 (ExoPlayer)"),
+    GOOGLE_ACCOUNT_WEB("個人 Google 帳號模式 (WebView)")
+}
+
+@Serializable
 enum class ShareBehavior(val title: String) {
     PLAY_IMMEDIATELY("立即插播"),
     ASK_WHEN_PLAYING("播放中時詢問（立即插播／排入下一首）"),

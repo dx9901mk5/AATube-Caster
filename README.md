@@ -9,7 +9,9 @@
 
 ### 🇹🇼 繁體中文介紹
 * **免 Root 支援 Android 14 / 15 / 16**：採用官方 `androidx.car.app` (`CarAppService` + `NavigationTemplate` + `Action.PAN`) 搭配硬體加速 `VirtualDisplay` 與 `Presentation`，無需 Root 或刷寫 LSPosed 模組即可投射完整自訂畫面至實體車機螢幕。
-* **天生 100% 無廣告解析引擎**：內建 `NewPipeExtractor` + `Media3 ExoPlayer` (`MergingMediaSource`)，免登入、無片頭與插播廣告，支援 1080p / 720p 硬體解碼、台灣 24 小時新聞直播與字幕顯示，手機低發熱不燙手。
+* **天生 100% 無廣告／個人 Google 帳號雙模切換（v1.3.0+）**：
+  * **⚡ 純淨無廣告模式**：內建 `NewPipeExtractor` + `Media3 ExoPlayer` (`MergingMediaSource`)，免登入、無片頭與插播廣告，支援 1080p / 720p 硬體解碼、台灣 24 小時新聞直播與字幕顯示，手機低發熱不燙手。
+  * **👤 個人 Google 帳號模式**：可一鍵切換為內建 Chrome WebView 模式，登入自己的 Google 帳號同步個人首頁演算法、訂閱頻道、觀看紀錄與私人播放清單，與車機端共用 Cookie 並支援自動跳過廣告腳本。
 * **原生 YouTube App「一鍵分享秒投車機」**：在手機官方 YouTube App 按下「分享 -> 投放到車機播放 (AA Tube)」，即可零打擾自動解析並投放到車機（支援設定「立即插播」或「排入下一首待播」）。
 * **車載專屬可觸控 YouTube 介面 & 完整手勢**：
   * **單擊畫面**：顯示／隱藏半透明控制列、畫質切換、字幕與時間軸進度條

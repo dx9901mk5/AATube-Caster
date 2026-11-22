@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import com.aayt.caster.data.CarViewMode
+import com.aayt.caster.data.PlayerEngineMode
 import com.aayt.caster.data.VideoAspectMode
 import com.aayt.caster.player.ExoPlayerController
 import kotlin.math.abs
@@ -62,6 +63,12 @@ class CarTouchGestureDispatcher(
 
     fun onClick(x: Float, y: Float) {
         val state = controller.state.value
+
+        // In Google Account WebView mode, pass all taps straight to WebView & top bar
+        if (state.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB) {
+            dispatchSyntheticTap(x, y)
+            return
+        }
 
         // When touch-locked in fullscreen player, only allow tapping the top-right unlock area or revealing lock hint
         if (state.carViewMode == CarViewMode.FULLSCREEN_PLAYER && state.isTouchLocked) {
@@ -139,6 +146,8 @@ class CarTouchGestureDispatcher(
 
         mainHandler.removeCallbacks(endScrollRunnable)
 
+        val isWebMode = state.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB
+
         if (!isScrolling) {
             isScrolling = true
             playerGestureHandledInBurst = false
@@ -148,7 +157,7 @@ class CarTouchGestureDispatcher(
             virtualCursorX = surfaceWidth * 0.5f
             virtualCursorY = if (state.isRelatedSheetOpen) surfaceHeight * 0.72f else surfaceHeight * 0.5f
 
-            if (state.carViewMode == CarViewMode.BROWSE || state.isRelatedSheetOpen) {
+            if (isWebMode || state.carViewMode == CarViewMode.BROWSE || state.isRelatedSheetOpen) {
                 dispatchMotion(MotionEvent.ACTION_DOWN, scrollDownTimeMs, scrollDownTimeMs, virtualCursorX, virtualCursorY)
             }
         }
@@ -156,7 +165,7 @@ class CarTouchGestureDispatcher(
         accumulatedDx += dx
         accumulatedDy += dy
 
-        if (state.carViewMode == CarViewMode.BROWSE || state.isRelatedSheetOpen) {
+        if (isWebMode || state.carViewMode == CarViewMode.BROWSE || state.isRelatedSheetOpen) {
             virtualCursorX = (virtualCursorX + dx).coerceIn(10f, surfaceWidth - 10f)
             virtualCursorY = (virtualCursorY + dy).coerceIn(10f, surfaceHeight - 10f)
             dispatchMotion(
@@ -272,7 +281,10 @@ class CarTouchGestureDispatcher(
         if (!isScrolling) return
         isScrolling = false
         val state = controller.state.value
-        if (state.carViewMode == CarViewMode.BROWSE || state.isRelatedSheetOpen) {
+        if (state.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB ||
+            state.carViewMode == CarViewMode.BROWSE ||
+            state.isRelatedSheetOpen
+        ) {
             dispatchMotion(
                 MotionEvent.ACTION_UP,
                 scrollDownTimeMs,

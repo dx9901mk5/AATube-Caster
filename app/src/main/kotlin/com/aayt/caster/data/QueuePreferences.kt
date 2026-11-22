@@ -36,6 +36,13 @@ class QueuePreferences(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO_CHECK_UPDATE, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_CHECK_UPDATE, value).apply()
 
+    var engineMode: PlayerEngineMode
+        get() {
+            val raw = prefs.getString(KEY_ENGINE_MODE, PlayerEngineMode.NATIVE_AD_FREE.name)
+            return PlayerEngineMode.entries.firstOrNull { it.name == raw } ?: PlayerEngineMode.NATIVE_AD_FREE
+        }
+        set(value) = prefs.edit().putString(KEY_ENGINE_MODE, value.name).apply()
+
     private fun decodeList(key: String): List<YtVideoItem> {
         val raw = prefs.getString(key, null) ?: return emptyList()
         return runCatching { json.decodeFromString<List<YtVideoItem>>(raw) }.getOrDefault(emptyList())
@@ -47,5 +54,6 @@ class QueuePreferences(context: Context) {
         private const val KEY_QUALITY = "preferred_quality_height"
         private const val KEY_SHARE_BEHAVIOR = "share_behavior"
         private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
+        private const val KEY_ENGINE_MODE = "player_engine_mode"
     }
 }

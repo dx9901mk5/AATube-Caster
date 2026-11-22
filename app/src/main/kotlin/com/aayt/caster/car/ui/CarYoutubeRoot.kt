@@ -43,9 +43,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.aayt.caster.data.CarViewMode
+import com.aayt.caster.data.PlayerEngineMode
 import com.aayt.caster.data.VideoAspectMode
 import com.aayt.caster.player.ExoPlayerController
 import com.aayt.caster.ui.theme.AATubeTheme
+import com.aayt.caster.ui.web.YoutubeAccountWebPlayer
 import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(UnstableApi::class)
@@ -70,6 +72,18 @@ fun CarYoutubeRoot(
     }
 
     AATubeTheme {
+        if (state.engineMode == PlayerEngineMode.GOOGLE_ACCOUNT_WEB) {
+            YoutubeAccountWebPlayer(
+                targetUrl = state.webTargetUrl,
+                triggerNonce = state.webUrlTriggerNonce,
+                isCarMode = true,
+                onSwitchToAdFreeMode = { controller.setEngineMode(PlayerEngineMode.NATIVE_AD_FREE) },
+                topSafePadding = topSafePadding,
+                bottomSafePadding = bottomSafePadding
+            )
+            return@AATubeTheme
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
